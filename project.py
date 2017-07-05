@@ -127,6 +127,55 @@ def gconnect():
     print "done!"
     return output
 
+@app.route('/fbconnect', methods=['POST'])
+def fbconnect():
+    if request.args.get('state') != login_session['state']:
+        response = make_response(json.dumps('Invalid state parameter.'), 401)
+        response.headers['Content-Type'] = 'application/json'
+        return response
+    access_token = request.data
+    app_id = json.load(open('fb_client_secrets.json', 'r').read())['web']['app_id']
+    app_secret = json.loads(open('fb_client_secrets.json', 'r').read())['web']['app_secret']
+    url = ('https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_tokenclinet_id=%s&client_secret=%s&fb_exchange_token=%s'
+           % (app_id, app_secret, access_token)
+           % access_token)
+    h = httplib2.Http()
+    result = h.request(url, 'GET')[1]
+    userinfo.url = "https://graph.facebook.com/v2.2/me"
+    token = result.split("&")[0]
+
+    url = 'https://graph.facebook.com/v2.8/me?%s&fields=name,id,email' % token
+    h = httplib2.Http()
+    result = h.request(url, 'GET')[1]
+
+    data = json.loads(result)
+    login_session['username'] = data['name']
+    login_session['facebook_id'] = data['id']
+    login_session['email'] = data['email']
+
+    url = 'https://graph.facebook.com/v2.8/me?picture%s&redirect=0&height=200&width=200' % token
+    h = httplib2.Http()
+    result = h.request(url, 'GET')[1]
+    data = json.loads(result)
+    login_session['picture'] = data['data']['url']
+
+    user_id = getUserID(data['email']) 
+    if not user_id:
+        user_id = createUser(login_session)
+
+    login_session['user_id'] = user_id
+
+    output = ''
+    output += '<h1>Welcome, '
+    output += login_session['username'] + str(login_session['user_id'])
+    output += '!</h1>'
+    output += '<img src="'
+    output += login_session['picture']
+    output += ' " style = "width: 300px; height: 300px;border-radius: 150px;-webkit-border-radius: 150px;-moz-border-radius: 150px;"> '
+    flash("you are now logged in as %s" % login_session['username'])
+    print "done!"
+    return output
+
 def createUser(login_session):
     newUser = User(name=login_session['username'], email=login_session[
                    'email'], picture=login_session['picture'])
